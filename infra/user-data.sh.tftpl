@@ -11,7 +11,7 @@ done
 echo "Data volume found at $DATA_DEVICE"
 
 dnf update -y
-dnf install -y docker xfsprogs awscli2
+dnf install -y docker xfsprogs
 
 systemctl enable docker
 systemctl start docker

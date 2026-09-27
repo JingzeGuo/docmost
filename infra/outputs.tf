@@ -7,3 +7,8 @@ output "public_ip" {
   description = "Public IPv4 address of the Docmost server"
   value       = aws_instance.docmost.public_ip
 }
+
+output "github_actions_deploy_role_arn" {
+  description = "IAM role assumed by GitHub Actions for deployment"
+  value       = aws_iam_role.github_actions_deploy.arn
+}
