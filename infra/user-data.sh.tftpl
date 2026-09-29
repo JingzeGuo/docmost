@@ -11,7 +11,7 @@ done
 echo "Data volume found at $DATA_DEVICE"
 
 dnf update -y
-dnf install -y docker xfsprogs openssl
+dnf install -y docker xfsprogs
 
 systemctl enable docker
 systemctl start docker
@@ -35,35 +35,6 @@ mount "$DATA_DEVICE" /data # mount the device to the directory
 DATA_UUID=$(blkid -s UUID -o value "$DATA_DEVICE") # get the UUID of the device
 echo "UUID=$DATA_UUID /data xfs defaults,nofail 0 2" >> /etc/fstab # add the mount to /etc/fstab for automatic mounting on boot
 
-mkdir -p /data/docmost /data/postgres /data/redis /data/config
+mkdir -p /data/docmost /data/postgres /data/redis
 
 mkdir -p /opt/docmost
-
-# Temporary fix: Downloading from GitHub raw content
-curl -fsSL \
-  https://raw.githubusercontent.com/JingzeGuo/docmost/main/docker-compose.yml \
-  -o /opt/docmost/docker-compose.yml
-
-# Create secrets.env if it doesn't exist
-if [ ! -f /data/config/secrets.env ]; then
-  echo "APP_SECRET=$(openssl rand -hex 32)" > /data/config/secrets.env
-  echo "DB_PASSWORD=$(openssl rand -hex 32)" >> /data/config/secrets.env
-  chmod 600 /data/config/secrets.env
-fi
-
-TOKEN=$(curl -sS -X PUT \
-  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" \
-  http://169.254.169.254/latest/api/token)
-
-PUBLIC_IP=$(curl -sS \
-  -H "X-aws-ec2-metadata-token: $TOKEN" \
-  http://169.254.169.254/latest/meta-data/public-ipv4)
-
-echo "APP_URL=http://$PUBLIC_IP" > /opt/docmost/.env
-cat /data/config/secrets.env >> /opt/docmost/.env
-chmod 600 /opt/docmost/.env
-
-cd /opt/docmost
-
-docker compose pull
-docker compose up -d

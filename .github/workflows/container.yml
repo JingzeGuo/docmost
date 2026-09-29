@@ -5,13 +5,13 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: read
-  packages: write
-
 jobs:
   docker-build:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@v4
@@ -41,3 +41,116 @@ jobs:
         run: |
           docker tag docmost:test ghcr.io/jingzeguo/docmost:${{ github.sha }}
           docker push ghcr.io/jingzeguo/docmost:${{ github.sha }}
+
+  deploy:
+    needs: docker-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-north-1
+
+      - name: Deploy through SSM
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > "$RUNNER_TEMP/ssm-command.json" <<EOF
+          {
+            "DocumentName": "AWS-RunShellScript",
+            "Targets": [
+              {
+                "Key": "tag:Project",
+                "Values": ["docmost"]
+              }
+            ],
+            "Comment": "Deploy ${GITHUB_SHA}",
+            "Parameters": {
+              "commands": [
+                "set -euo pipefail",
+                "curl -fsSL https://raw.githubusercontent.com/JingzeGuo/docmost/${GITHUB_SHA}/scripts/deploy.sh -o /tmp/docmost-deploy.sh",
+                "chmod +x /tmp/docmost-deploy.sh",
+                "/tmp/docmost-deploy.sh ${GITHUB_SHA}"
+              ]
+            }
+          }
+          EOF
+
+          COMMAND_ID=$(
+            aws ssm send-command \
+              --cli-input-json "file://$RUNNER_TEMP/ssm-command.json" \
+              --query "Command.CommandId" \
+              --output text
+          )
+
+          echo "SSM command ID: $COMMAND_ID"
+
+          INSTANCE_ID=""
+
+          for i in {1..30}; do
+            INSTANCE_ID=$(
+              aws ssm list-command-invocations \
+                --command-id "$COMMAND_ID" \
+                --query "CommandInvocations[0].InstanceId" \
+                --output text
+            )
+
+            if [[ -n "$INSTANCE_ID" && "$INSTANCE_ID" != "None" ]]; then
+              break
+            fi
+
+            sleep 2
+          done
+
+          if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; then
+            echo "No SSM invocation found"
+            exit 1
+          fi
+
+          echo "Target instance: $INSTANCE_ID"
+
+          for i in {1..120}; do
+            STATUS=$(
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$INSTANCE_ID" \
+                --query "Status" \
+                --output text
+            )
+
+            echo "Deployment status: $STATUS"
+
+            case "$STATUS" in
+              Success)
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID"
+                exit 0
+                ;;
+
+              Failed|Cancelled|TimedOut)
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID" || true
+                exit 1
+                ;;
+            esac
+
+            sleep 5
+          done
+
+          echo "Deployment timed out after 10 minutes"
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" || true
+
+          exit 1
