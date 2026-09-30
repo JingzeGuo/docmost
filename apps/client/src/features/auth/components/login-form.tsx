@@ -11,7 +11,6 @@ import {
   Box,
   Anchor,
   Group,
-  Text,
 } from "@mantine/core";
 import classes from "./auth.module.css";
 import { useRedirectIfAuthenticated } from "@/features/auth/hooks/use-redirect-if-authenticated.ts";
@@ -77,9 +76,6 @@ export function LoginForm() {
           <Title order={1} size="h2" ta="center" fw={500} mb="md">
             {t("Login")}
           </Title>
-          <Text ta="center" c="dimmed" size="sm" mb="md">
-            test
-          </Text>
 
           <SsoLogin />
 
