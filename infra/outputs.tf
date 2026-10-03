@@ -12,3 +12,8 @@ output "github_actions_deploy_role_arn" {
   description = "IAM role assumed by GitHub Actions for deployment"
   value       = aws_iam_role.github_actions_deploy.arn
 }
+
+output "alb_dns_name" {
+  description = "DNS name of the Docmost Application Load Balancer"
+  value       = aws_lb.docmost.dns_name
+}
