@@ -29,19 +29,10 @@ DB_PASSWORD=$(aws ssm get-parameter \
   --query "Parameter.Value" \
   --output text)
 
-# Get current public IP from EC2 metadata
-TOKEN=$(curl -fsS -X PUT \
-  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" \
-  http://169.254.169.254/latest/api/token)
-
-PUBLIC_IP=$(curl -fsS \
-  -H "X-aws-ec2-metadata-token: $TOKEN" \
-  http://169.254.169.254/latest/meta-data/public-ipv4)
-
 # Write runtime configuration
 cat > "$APP_DIR/.env.tmp" <<EOF
 DOCMOST_IMAGE=$IMAGE
-APP_URL=http://$PUBLIC_IP
+APP_URL=https://docmost.click
 APP_SECRET=$APP_SECRET
 DB_PASSWORD=$DB_PASSWORD
 EOF
